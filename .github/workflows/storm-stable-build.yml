@@ -17,7 +17,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Prepare Android SDK and install compileSdk 37
+      - name: Diagnose Android SDK 37 availability and prepare build
         run: |
           set -euo pipefail
           if [ -z "${ANDROID_SDK_ROOT:-}" ] && [ -n "${ANDROID_HOME:-}" ]; then
@@ -48,23 +48,30 @@ jobs:
           fi
           echo "Using sdkmanager: $SDKMANAGER"
 
+          echo "=== SDK Command-line Tools version/info ==="
+          "$SDKMANAGER" --version || true
+          find "$ANDROID_SDK_ROOT/cmdline-tools" -maxdepth 3 -name source.properties -print -exec grep -H '^Pkg.Revision' {} \; 2>/dev/null || true
+          find "$ANDROID_SDK_ROOT/cmdline-tools" -maxdepth 3 -name package.xml -print 2>/dev/null || true
+
           yes | "$SDKMANAGER" --licenses >/dev/null || true
 
-          echo "Checking availability of platforms;android-37..."
-          "$SDKMANAGER" --list 2>/dev/null | grep -n "platforms;android-37" || true
+          echo "=== sdkmanager --list --channel=3 (Android 37 platform packages) ==="
+          "$SDKMANAGER" --list --channel=3 2>&1 | tee /tmp/sdk-list-channel3.txt
+          echo "=== Matching Android 37 platform entries ==="
+          grep -nE 'platforms;android-37(\.0)?' /tmp/sdk-list-channel3.txt || true
+          echo "=== All Android 3x platform entries (for context) ==="
+          grep -nE 'platforms;android-3[0-9](\.[0-9]+)?' /tmp/sdk-list-channel3.txt || true
 
-          if "$SDKMANAGER" --install "platforms;android-37"; then
-            echo "platforms;android-37 installed successfully."
+          if grep -qE '^\s*platforms;android-37\.0\b' /tmp/sdk-list-channel3.txt || "$SDKMANAGER" --list --channel=3 2>/dev/null | grep -q 'platforms;android-37.0'; then
+            echo "RESULT: platforms;android-37.0 is AVAILABLE. Installing platforms;android-37.0..."
+            "$SDKMANAGER" --channel=3 --install "platforms;android-37.0"
+            "$SDKMANAGER" --install "build-tools;35.0.0" "platform-tools" || true
+            echo "NOTE: Project uses compileSdk 37 (integer). Installed platforms;android-37.0 is expected to satisfy API level 37 for Gradle/AGP if the package provides API 37."
           else
-            echo "ERROR: Failed to install package 'platforms;android-37'."
-            echo "Possible reason: Android SDK Platform 37 is not available in the configured SDK repositories on this runner."
-            echo "Project requires compileSdk 37 (app/build.gradle). I cannot change Gradle/source/dependency versions without approval."
-            echo "Available nearby platform packages:"
-            "$SDKMANAGER" --list 2>/dev/null | grep -E 'platforms;android-3[0-9]|platforms;android-[0-9]+' | head -40 || true
+            echo "RESULT: platforms;android-37.0 is NOT available in channel=3 repositories on this runner."
+            echo "Project requires compileSdk 37 (app/build.gradle). I cannot change project configuration without approval."
             exit 1
           fi
-
-          "$SDKMANAGER" --install "build-tools;35.0.0" "platform-tools" || true
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew

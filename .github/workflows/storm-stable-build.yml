@@ -17,7 +17,7 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Prepare Android SDK (runner preinstalled)
+      - name: Prepare Android SDK and install compileSdk 37
         run: |
           set -euo pipefail
           if [ -z "${ANDROID_SDK_ROOT:-}" ] && [ -n "${ANDROID_HOME:-}" ]; then
@@ -49,7 +49,22 @@ jobs:
           echo "Using sdkmanager: $SDKMANAGER"
 
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --install "platforms;android-37" "build-tools;35.0.0" "platform-tools"
+
+          echo "Checking availability of platforms;android-37..."
+          "$SDKMANAGER" --list 2>/dev/null | grep -n "platforms;android-37" || true
+
+          if "$SDKMANAGER" --install "platforms;android-37"; then
+            echo "platforms;android-37 installed successfully."
+          else
+            echo "ERROR: Failed to install package 'platforms;android-37'."
+            echo "Possible reason: Android SDK Platform 37 is not available in the configured SDK repositories on this runner."
+            echo "Project requires compileSdk 37 (app/build.gradle). I cannot change Gradle/source/dependency versions without approval."
+            echo "Available nearby platform packages:"
+            "$SDKMANAGER" --list 2>/dev/null | grep -E 'platforms;android-3[0-9]|platforms;android-[0-9]+' | head -40 || true
+            exit 1
+          fi
+
+          "$SDKMANAGER" --install "build-tools;35.0.0" "platform-tools" || true
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew

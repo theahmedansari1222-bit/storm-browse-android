@@ -1,0 +1,7 @@
+Storm Browser is an open source Android web browser focused on privacy and customization.
+
+Features:
+- Clean, modern interface
+- Ad and tracker blocking options
+- Privacy controls
+- Customizable settings
